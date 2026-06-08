@@ -44,10 +44,23 @@ type AccountsConf struct {
 	Secondary []string `json:"secondary" yaml:"secondary"`
 }
 
+type YunbeiTaskConf struct {
+	EnableViewVipCenter      bool `json:"enableViewVipCenter" yaml:"enableViewVipCenter"`
+	EnableLikeComment        bool `json:"enableLikeComment" yaml:"enableLikeComment"`
+	EnableListenIndie        bool `json:"enableListenIndie" yaml:"enableListenIndie"`
+	EnableReserve            bool `json:"enableReserve" yaml:"enableReserve"`
+	EnableFollowArtist       bool `json:"enableFollowArtist" yaml:"enableFollowArtist"`
+	EnableLikeSong           bool `json:"enableLikeSong" yaml:"enableLikeSong"`
+	EnableCollectSong        bool `json:"enableCollectSong" yaml:"enableCollectSong"`
+	EnablePublishNote        bool `json:"enablePublishNote" yaml:"enablePublishNote"`
+	EnablePlayDailyRecommend bool `json:"enablePlayDailyRecommend" yaml:"enablePlayDailyRecommend"`
+}
+
 type SignConf struct {
-	EnablePrimary     bool `json:"enablePrimary" yaml:"enablePrimary"`
-	EnableSecondaries bool `json:"enableSecondaries" yaml:"enableSecondaries"`
-	IdentityCacheDays *int `json:"identityCacheDays" yaml:"identityCacheDays"`
+	EnablePrimary     bool            `json:"enablePrimary" yaml:"enablePrimary"`
+	EnableSecondaries bool            `json:"enableSecondaries" yaml:"enableSecondaries"`
+	IdentityCacheDays *int            `json:"identityCacheDays" yaml:"identityCacheDays"`
+	YunbeiTask        *YunbeiTaskConf `json:"yunbeiTask" yaml:"yunbeiTask"`
 }
 
 type MixPlayConf struct {
@@ -79,17 +92,17 @@ type Config struct {
 	PlayIds     *PlayIdsConfig   `json:"playids" yaml:"playids"`
 	Sign        *SignConf        `json:"sign" yaml:"sign"`
 	MixPlay     *MixPlayConf     `json:"mixPlay" yaml:"mixPlay"`
+	Note        *NoteConf        `json:"note" yaml:"note"`
 	MusicianVip *MusicianVipConf `json:"musicianVip" yaml:"musicianVip"`
 }
 
 // MusicianVipConf 音乐人黑胶会员任务配置
 type MusicianVipConf struct {
-	Note MusicianVipNoteConf `json:"note" yaml:"note"`
 	Play MusicianVipPlayConf `json:"play" yaml:"play"`
 }
 
-// MusicianVipNoteConf 笔记发布任务配置
-type MusicianVipNoteConf struct {
+// NoteConf 笔记发布公共配置
+type NoteConf struct {
 	Titles       []string `json:"titles" yaml:"titles"`
 	TitlesFile   string   `json:"titlesFile" yaml:"titlesFile"`
 	Messages     []string `json:"messages" yaml:"messages"`
@@ -114,6 +127,19 @@ func (c *Config) Validate() error {
 		if c.Sign.IdentityCacheDays == nil {
 			days := 30
 			c.Sign.IdentityCacheDays = &days
+		}
+		if c.Sign.YunbeiTask == nil {
+			c.Sign.YunbeiTask = &YunbeiTaskConf{
+				EnableViewVipCenter:      true,
+				EnableLikeComment:        true,
+				EnableListenIndie:        true,
+				EnableReserve:            true,
+				EnableFollowArtist:       true,
+				EnableLikeSong:           true,
+				EnableCollectSong:        true,
+				EnablePublishNote:        true,
+				EnablePlayDailyRecommend: false,
+			}
 		}
 	}
 	return nil
@@ -186,11 +212,13 @@ func (c *Config) ReplaceMagicVariables(name, value string) (*Config, bool) {
 	if c.MusicianVip != nil && c.MusicianVip.Play.IDsFile != "" {
 		c.MusicianVip.Play.IDsFile = os.Expand(c.MusicianVip.Play.IDsFile, mapping)
 	}
-	if c.MusicianVip != nil && c.MusicianVip.Note.MessagesFile != "" {
-		c.MusicianVip.Note.MessagesFile = os.Expand(c.MusicianVip.Note.MessagesFile, mapping)
-	}
-	if c.MusicianVip != nil && c.MusicianVip.Note.TitlesFile != "" {
-		c.MusicianVip.Note.TitlesFile = os.Expand(c.MusicianVip.Note.TitlesFile, mapping)
+	if c.Note != nil {
+		if c.Note.MessagesFile != "" {
+			c.Note.MessagesFile = os.Expand(c.Note.MessagesFile, mapping)
+		}
+		if c.Note.TitlesFile != "" {
+			c.Note.TitlesFile = os.Expand(c.Note.TitlesFile, mapping)
+		}
 	}
 	return c, isset
 }

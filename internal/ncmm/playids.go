@@ -23,15 +23,16 @@ import (
 )
 
 type PlayIdsOpts struct {
-	Ids        string
-	IdsFile    string
-	DailyMin   int64
-	DailyMax   int64
-	RunMin     int64
-	RunMax     int64
-	GapMin     int64
-	GapMax     int64
-	CookieFile string
+	Ids            string
+	IdsFile        string
+	DailyMin       int64
+	DailyMax       int64
+	RunMin         int64
+	RunMax         int64
+	GapMin         int64
+	GapMax         int64
+	CookieFile     string
+	DisableMixPlay bool
 }
 
 type PlayIds struct {
@@ -422,7 +423,7 @@ func (c *PlayIds) executeForCookie(ctx context.Context, cookieFile string, uniqu
 	)
 	mixCfg := c.root.Cfg.MixPlay
 
-	if mixCfg != nil && mixCfg.Enabled && mixCfg.DailyRecommendRatio > 0 {
+	if !c.opts.DisableMixPlay && mixCfg != nil && mixCfg.Enabled && mixCfg.DailyRecommendRatio > 0 {
 		c.log("启用混听干扰风控：自动拉取辅助账号每日推荐...")
 		recommendResp, err := request.RecommendSongs(ctx, &weapi.RecommendSongsReq{})
 		if err != nil {

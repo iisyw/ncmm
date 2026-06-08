@@ -241,3 +241,45 @@ func (a *Api) Comments(ctx context.Context, req *CommentsReq) (*CommentsResp, er
 	_ = resp
 	return &reply, nil
 }
+
+type CommentLikeReq struct {
+	types.ReqCommon
+	ThreadId  string `json:"threadId"`
+	CommentId string `json:"commentId"`
+}
+
+type CommentLikeResp struct {
+	Code int64  `json:"code"`
+	Msg  string `json:"msg"`
+}
+
+// CommentLike 点赞歌曲/动态的评论
+func (a *Api) CommentLike(ctx context.Context, req *CommentLikeReq) (*CommentLikeResp, error) {
+	var (
+		url   = "https://music.163.com/weapi/v1/comment/like"
+		reply CommentLikeResp
+		opts  = api.NewOptions()
+	)
+	resp, err := a.client.Request(ctx, url, req, &reply, opts)
+	if err != nil {
+		return nil, fmt.Errorf("Request: %w", err)
+	}
+	_ = resp
+	return &reply, nil
+}
+
+// CommentUnlike 取消点赞歌曲/动态的评论
+func (a *Api) CommentUnlike(ctx context.Context, req *CommentLikeReq) (*CommentLikeResp, error) {
+	var (
+		url   = "https://music.163.com/weapi/v1/comment/unlike"
+		reply CommentLikeResp
+		opts  = api.NewOptions()
+	)
+	resp, err := a.client.Request(ctx, url, req, &reply, opts)
+	if err != nil {
+		return nil, fmt.Errorf("Request: %w", err)
+	}
+	_ = resp
+	return &reply, nil
+}
+

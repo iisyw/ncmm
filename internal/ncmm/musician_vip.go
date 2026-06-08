@@ -6,7 +6,6 @@ package ncmm
 import (
 	"context"
 	"fmt"
-	"io"
 	"math/rand"
 	"net/http"
 	neturl "net/url"
@@ -131,9 +130,16 @@ func (c *MusicianVip) execute(ctx context.Context) error {
 		switch sub.MissionCode {
 		case "mission_code_musician_notebook_publish":
 			// 发布图文笔记任务
-			if err := c.handleNoteTask(ctx, cli, eapiCli, sub); err != nil {
-				log.Error("[musician-vip] 笔记任务执行失败: %s", err)
-				c.cmd.Printf("[musician-vip] ❌ 笔记任务失败: %s\n", err)
+			if sub.ProgressRate >= sub.TotalCompleteNum {
+				c.cmd.Println("[musician-vip] 笔记任务已完成，无需发布")
+			} else {
+				c.cmd.Println("[musician-vip] 处理笔记任务...")
+				n := NewNote(c.root, c.l)
+				_, err := n.ExecuteForCookie(ctx, c.root.Cfg.Accounts.Primary)
+				if err != nil {
+					log.Error("[musician-vip] 笔记任务执行失败: %s", err)
+					c.cmd.Printf("[musician-vip] ❌ 笔记任务失败: %s\n", err)
+				}
 			}
 
 		case "mission_code_recently_play_count":
@@ -151,144 +157,7 @@ func (c *MusicianVip) execute(ctx context.Context) error {
 	return nil
 }
 
-// handleNoteTask 处理发布图文笔记任务
-func (c *MusicianVip) handleNoteTask(ctx context.Context, cli *api.Client, eapiCli *eapi.Api, sub eapi.MusicianVipSubTask) error {
-	c.cmd.Println("[musician-vip] 处理笔记任务...")
 
-	cfg := c.root.Cfg.MusicianVip.Note
-
-	// 检查是否需要发布（进度 < 目标）
-	if sub.ProgressRate >= sub.TotalCompleteNum {
-		c.cmd.Println("[musician-vip] 笔记任务已完成，无需发布")
-		return nil
-	}
-
-	// 获取笔记内容 (支持 messagesFile 外部文本拉取与并集合并去重)
-	var messages []string
-	if len(cfg.Messages) > 0 {
-		messages = append(messages, cfg.Messages...)
-	}
-	if cfg.MessagesFile != "" {
-		fileMsgs, err := parseMessagesFromFile(cfg.MessagesFile)
-		if err != nil {
-			c.cmd.Printf("[musician-vip] [WARN] 读取 messagesFile (%s) 失败: %s，本次将仅使用内置消息库\n", cfg.MessagesFile, err)
-		} else {
-			messages = append(messages, fileMsgs...)
-		}
-	}
-
-	seen := make(map[string]bool)
-	var uniqueMessages []string
-	for _, m := range messages {
-		if !seen[m] {
-			seen[m] = true
-			uniqueMessages = append(uniqueMessages, m)
-		}
-	}
-
-	// 获取笔记标题 (支持 titlesFile 外部文本拉取与并集合并去重)
-	var titles []string
-	if len(cfg.Titles) > 0 {
-		titles = append(titles, cfg.Titles...)
-	}
-	if cfg.TitlesFile != "" {
-		fileTitles, err := parseMessagesFromFile(cfg.TitlesFile)
-		if err != nil {
-			c.cmd.Printf("[musician-vip] [WARN] 读取 titlesFile (%s) 失败: %s，本次将仅使用内置标题库\n", cfg.TitlesFile, err)
-		} else {
-			titles = append(titles, fileTitles...)
-		}
-	}
-
-	seenTitles := make(map[string]bool)
-	var uniqueTitles []string
-	for _, t := range titles {
-		if !seenTitles[t] {
-			seenTitles[t] = true
-			uniqueTitles = append(uniqueTitles, t)
-		}
-	}
-
-	title := c.getRandomMessage(uniqueTitles)
-	if title == "" {
-		title = "今日音乐分享"
-	}
-
-	msg := c.getRandomMessage(uniqueMessages)
-	if msg == "" {
-		msg = "分享一首好听的歌~"
-	}
-
-	var pics string
-	if cfg.Type == 39 {
-		// 获取图片URL
-		imageURL := c.getRandomImageURL(cfg.ImageURLs)
-		if imageURL == "" {
-			return fmt.Errorf("没有配置图片URL，请在 config.yaml 的 musicianVip.note.imageUrls 中配置")
-		}
-
-		c.cmd.Printf("[musician-vip] 发布图文笔记: 标题=%q, 内容=%q, 图片=%s\n", title, msg, imageURL)
-
-		// 下载图片到临时文件
-		tmpFile, err := downloadImageToTemp(ctx, imageURL)
-		if err != nil {
-			return fmt.Errorf("下载图片失败: %w", err)
-		}
-		defer os.Remove(tmpFile)
-
-		// 上传图片
-		c.cmd.Println("[musician-vip] 上传图片...")
-		var errUpload error
-		pics, errUpload = eapiCli.EventUploadImage(ctx, tmpFile)
-		if errUpload != nil {
-			return fmt.Errorf("上传图片失败: %w", errUpload)
-		}
-		c.cmd.Printf("[musician-vip] 图片上传成功: %s\n", pics)
-	} else {
-		c.cmd.Printf("[musician-vip] 发布普通笔记: 标题=%q, 内容=%q\n", title, msg)
-	}
-
-	// 发布动态
-	c.cmd.Println("[musician-vip] 发布动态...")
-	resp, err := eapiCli.EventPublish(ctx, &eapi.EventPublishReq{
-		Title: title,
-		Msg:   msg,
-		Type:  "noresource",
-		Pics:  pics,
-	})
-	if err != nil {
-		return fmt.Errorf("发布动态失败: %w", err)
-	}
-	if resp.Code != 200 {
-		return fmt.Errorf("发布动态失败: code=%d", resp.Code)
-	}
-
-	c.cmd.Printf("[musician-vip] ✅ 笔记发布成功! 动态ID: %d\n", resp.Id)
-
-	// 检查是否自动删除发布后的笔记（默认为开启）
-	autoDelete := true
-	if cfg.AutoDelete != nil {
-		autoDelete = *cfg.AutoDelete
-	}
-
-	if autoDelete {
-		// 5 ~ 30 秒的随机延迟
-		delay := 5 + c.rng.Intn(26)
-		c.cmd.Printf("[musician-vip] 等待 %d 秒后执行自动删除...\n", delay)
-		time.Sleep(time.Duration(delay) * time.Second)
-		respDel, err := eapiCli.EventDelete(ctx, &eapi.EventDeleteReq{
-			Id: resp.Id,
-		})
-		if err != nil {
-			c.cmd.Printf("[musician-vip] ⚠️ 自动删除动态失败: %s\n", err)
-		} else if respDel.Code != 200 {
-			c.cmd.Printf("[musician-vip] ⚠️ 自动删除动态失败: code=%d\n", respDel.Code)
-		} else {
-			c.cmd.Printf("[musician-vip] 🗑️ 笔记已成功自动删除 (动态ID: %d)\n", resp.Id)
-		}
-	}
-	return nil
-}
 
 // handlePlayTask 处理播放任务
 func (c *MusicianVip) handlePlayTask(ctx context.Context, cli *api.Client, sub eapi.MusicianVipSubTask, recentPlayCount30 int) error {
@@ -481,22 +350,6 @@ func playCandidateIdsSource(vipIds, vipIdsFile string, rootPlayCfg *config.PlayI
 	return uniqueIds
 }
 
-// getRandomMessage 随机获取一条消息
-func (c *MusicianVip) getRandomMessage(messages []string) string {
-	if len(messages) == 0 {
-		return ""
-	}
-	return messages[c.rng.Intn(len(messages))]
-}
-
-// getRandomImageURL 随机获取一个图片URL
-func (c *MusicianVip) getRandomImageURL(urls []string) string {
-	if len(urls) == 0 {
-		return ""
-	}
-	return urls[c.rng.Intn(len(urls))]
-}
-
 // loadCookies 从配置加载cookie
 func loadCookies(cli *api.Client, cfg *api.Config) error {
 	if cfg.Cookie.Filepath != "" {
@@ -525,7 +378,7 @@ func loadCookies(cli *api.Client, cfg *api.Config) error {
 			}
 			cli.SetCookies(url, cookies)
 
-			// 同时也设置到 eapi 使用的 interface3 域下，以保证 resty 能自动匹配并发送这些 cookie
+			// 同时也设置到 eapi 使用的 interface3 域下，以保证 resty 能自动匹配并发送 these cookie
 			urlEapi := &neturl.URL{
 				Scheme: "https",
 				Host:   "interface3.music.163.com",
@@ -564,126 +417,9 @@ func parseCookieString(s string) []*http.Cookie {
 	return cookies
 }
 
-// downloadImageToTemp 下载图片到临时文件
-func downloadImageToTemp(ctx context.Context, url string) (string, error) {
-	if strings.HasPrefix(url, "/") || strings.HasPrefix(url, "./") {
-		return url, nil
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("download: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download failed: status=%d", resp.StatusCode)
-	}
-
-	tmpFile, err := os.CreateTemp("", "ncm-img-*.jpg")
-	if err != nil {
-		return "", fmt.Errorf("create temp file: %w", err)
-	}
-	defer tmpFile.Close()
-
-	if _, err := tmpFile.ReadFrom(resp.Body); err != nil {
-		os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("write file: %w", err)
-	}
-
-	return tmpFile.Name(), nil
-}
-
-// MusicianVipSubTask 子任务信息
-type MusicianVipSubTask struct {
-	Name             string
-	MissionCode      string
-	MissionStatus    int
-	ProgressRate     int
-	TotalCompleteNum int
-}
-
-func toSubTask(sub eapi.MusicianVipSubTask) MusicianVipSubTask {
-	return MusicianVipSubTask{
-		Name:             sub.Name,
-		MissionCode:      sub.MissionCode,
-		MissionStatus:    sub.MissionStatus,
-		ProgressRate:     sub.ProgressRate,
-		TotalCompleteNum: sub.TotalCompleteNum,
-	}
-}
-
-type MusicianVipConf = config.MusicianVipConf
-type MusicianVipNoteConf = config.MusicianVipNoteConf
-type MusicianVipPlayConf = config.MusicianVipPlayConf
-
-func parseMessagesFromFile(filePath string) ([]string, error) {
-	var data []byte
-	var err error
-	if strings.HasPrefix(filePath, "http://") || strings.HasPrefix(filePath, "https://") {
-		resp, err := http.Get(filePath)
-		if err != nil {
-			return nil, fmt.Errorf("下载远程文件失败: %w", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("下载远程文件失败，状态码: %d", resp.StatusCode)
-		}
-		data, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("读取远程文件内容失败: %w", err)
-		}
-	} else {
-		data, err = os.ReadFile(filePath)
-		if err != nil {
-			return nil, err
-		}
-	}
-	var list []string
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		list = append(list, line)
-	}
-	return list, nil
-}
-
 // testNoteTask 用于单独运行图文笔记任务的测试
 func (c *MusicianVip) testNoteTask(ctx context.Context) error {
-	if err := c.validate(); err != nil {
-		return fmt.Errorf("validate: %w", err)
-	}
-
-	cli, err := api.NewClient(c.root.Cfg.Network, c.l)
-	if err != nil {
-		return fmt.Errorf("NewClient: %w", err)
-	}
-	defer cli.Close(ctx)
-
-	// 加载cookie
-	if err := loadCookies(cli, c.root.Cfg.Network); err != nil {
-		log.Warn("[musician-vip] load cookies err: %s", err)
-	}
-
-	eapiCli := eapi.New(cli)
-
-	// 构造虚拟子任务，保证 ProgressRate < TotalCompleteNum 以触发执行
-	sub := eapi.MusicianVipSubTask{
-		Name:             "发布图文笔记(测试)",
-		MissionCode:      "mission_code_musician_notebook_publish",
-		MissionStatus:    0,
-		ProgressRate:     0,
-		TotalCompleteNum: 1,
-	}
-
-	return c.handleNoteTask(ctx, cli, eapiCli, sub)
+	n := NewNote(c.root, c.l)
+	_, err := n.ExecuteForCookie(ctx, c.root.Cfg.Accounts.Primary)
+	return err
 }
