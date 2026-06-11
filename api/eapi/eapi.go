@@ -13,3 +13,7 @@ func New(client *api.Client) *Api {
 	a := Api{client: client}
 	return &a
 }
+
+func (a *Api) Client() *api.Client {
+	return a.client
+}

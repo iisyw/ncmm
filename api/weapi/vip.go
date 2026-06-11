@@ -872,6 +872,7 @@ type VipWelfareListData struct {
 	SpecialPrice    float64 `json:"specialPrice"`
 	OrginalPrice    float64 `json:"orginalPrice"`
 	Status          int64   `json:"status"`
+	UserReceiveStatus int64 `json:"userReceiveStatus"`
 	Seq             int64   `json:"seq"`
 	WelfareItem     struct {
 		Level        int64  `json:"level"`
@@ -1291,3 +1292,79 @@ func (a *Api) VipTaskSign(ctx context.Context, req *VipTaskSignReq) (*VipTaskSig
 	_ = resp
 	return &reply, nil
 }
+
+type VipWelfareClaimReq struct {
+	types.ReqCommon
+	WelfareId int64 `json:"welfareId"`
+}
+
+type VipWelfareClaimResp struct {
+	types.RespCommon[any]
+}
+
+// VipWelfareClaim 领取黑胶会员尊享福利 (WEAPI)
+func (a *Api) VipWelfareClaim(ctx context.Context, req *VipWelfareClaimReq) (*VipWelfareClaimResp, error) {
+	var (
+		url   = "https://music.163.com/weapi/vipnewcenter/app/level/welfare/claim"
+		reply VipWelfareClaimResp
+		opts  = api.NewOptions()
+	)
+
+	resp, err := a.client.Request(ctx, url, req, &reply, opts)
+	if err != nil {
+		return nil, fmt.Errorf("Request: %w", err)
+	}
+	_ = resp
+	return &reply, nil
+}
+
+type VipMiddlePageViewReportReq struct {
+	types.ReqCommon
+	WebkitContext string `json:"-"`
+	Data          string `json:"data"`
+}
+
+type VipMiddlePageViewReportData struct {
+	ActionType         string `json:"actionType"`
+	Time               int64  `json:"time"`
+	ActivityPlatformId string `json:"activityPlatformId,omitempty"`
+	TaskId             string `json:"taskId"`
+	TaskType           int    `json:"taskType"`
+	ViewTime           int64  `json:"viewTime"`
+	JumpUrl            string `json:"jumpUrl"`
+	TaskBusiness       string `json:"taskBusiness"`
+	ResourceType       string `json:"resourceType"`
+	PageCode           string `json:"pageCode"`
+}
+
+type VipMiddlePageViewReportResp struct {
+	Code    int    `json:"code"`
+	Data    bool   `json:"data"`
+	Message string `json:"message"`
+}
+
+// VipMiddlePageViewReport 上报中台页面浏览时长 (WEAPI)
+func (a *Api) VipMiddlePageViewReport(ctx context.Context, req *VipMiddlePageViewReportReq) (*VipMiddlePageViewReportResp, error) {
+	var (
+		url   = "https://interface.music.163.com/weapi/middle/page/view/report"
+		reply VipMiddlePageViewReportResp
+		opts  = api.NewOptions()
+	)
+
+	// Set custom User-Agent, Host, Origin, Referer, and netease_webkit_context for webview emulation
+	opts.SetHeader("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 CloudMusic/0.1.1 NeteaseMusic/9.4.95")
+	opts.SetHeader("Host", "interface.music.163.com")
+	opts.SetHeader("Origin", "https://music.163.com")
+	opts.SetHeader("Referer", "https://music.163.com/")
+	if req.WebkitContext != "" {
+		opts.SetHeader("netease_webkit_context", req.WebkitContext)
+	}
+
+	resp, err := a.client.Request(ctx, url, req, &reply, opts)
+	if err != nil {
+		return nil, fmt.Errorf("Request: %w", err)
+	}
+	_ = resp
+	return &reply, nil
+}
+

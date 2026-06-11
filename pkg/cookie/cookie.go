@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -135,6 +136,13 @@ func (c *Cookie) init() error {
 	for domain, cookies := range content {
 		imported[domain] = make(map[string]entry)
 		for name, cookie := range cookies {
+			// 过滤掉值中含有 RFC 6265 非法字符的 Cookie（如双引号、逗号、分号、反斜杠）。
+			// 这类 Cookie 通常是前端埋点/追踪 SDK 产生的（如 caid），其值为未编码的 JSON
+			// 字符串，会触发 Go net/http 标准库的 "invalid byte in Cookie.Value" 警告。
+			// 核心鉴权 Cookie（MUSIC_U、__csrf 等）的值不会包含这些字符，过滤不会误伤。
+			if strings.ContainsAny(cookie.Value, "\",;\\") {
+				continue
+			}
 			imported[domain][name] = entry{
 				Name:       cookie.Name,
 				Value:      cookie.Value,

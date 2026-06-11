@@ -21,6 +21,10 @@ func New(client *api.Client) *Api {
 	return &a
 }
 
+func (a *Api) Client() *api.Client {
+	return a.client
+}
+
 func (a *Api) NeedLogin(ctx context.Context) bool {
 	u, _ := url.Parse("https://music.163.com")
 	for _, ck := range a.client.GetClient().Jar.Cookies(u) {

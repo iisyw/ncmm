@@ -68,6 +68,7 @@ type SignConf struct {
 	IdentityCacheDays *int            `json:"identityCacheDays" yaml:"identityCacheDays"`
 	YunbeiTask        *YunbeiTaskConf `json:"yunbeiTask" yaml:"yunbeiTask"`
 	Automatic         bool            `json:"automatic" yaml:"automatic"`
+	EnableVipTask     *bool           `json:"enableVipTask" yaml:"enableVipTask"`
 }
 
 type TaskConf struct {
@@ -174,6 +175,10 @@ func (c *Config) Validate() error {
 		if c.Sign.IdentityCacheDays == nil {
 			days := 30
 			c.Sign.IdentityCacheDays = &days
+		}
+		if c.Sign.EnableVipTask == nil {
+			enable := true
+			c.Sign.EnableVipTask = &enable
 		}
 		if c.Sign.YunbeiTask == nil {
 			c.Sign.YunbeiTask = &YunbeiTaskConf{

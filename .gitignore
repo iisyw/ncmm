@@ -6,6 +6,7 @@
 .vscode/
 .gemini/
 .claude/
+.ncmm/
 /run/
 /testdata/
 /pkg/log/log/
