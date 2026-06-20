@@ -1,0 +1,37 @@
+services:
+  ncmm:
+    build: .
+    image: ncmm:latest
+    container_name: ncmm
+    restart: "no"
+    network_mode: host
+    volumes:
+      - ./data:/root/.ncmm
+    environment:
+      - TZ=Asia/Shanghai
+      # CookieCloud 配置（按实际情况修改）
+      - COOKIECLOUD_SERVER=http://127.0.0.1:8088
+      - COOKIECLOUD_UUID=your-uuid
+      - COOKIECLOUD_PASSWORD=your-password
+    # 先通过 CookieCloud 同步 Cookie，再执行任务（用 ; 分隔，登录失败也会执行 task）
+    command: >
+      sh -c "ncmm login cookiecloud -u $$COOKIECLOUD_UUID -p $$COOKIECLOUD_PASSWORD -s $$COOKIECLOUD_SERVER -m ; ncmm task"
+
+# ============================================================
+# 使用说明:
+#
+# 1. 修改上方 environment 中的 CookieCloud 配置
+#
+# 2. 启动任务（自动同步 Cookie 并执行）
+#
+#    docker compose up
+#
+# 3. 其他常用命令
+#
+#    docker compose run --rm ncmm sign              # 只签到
+#    docker compose run --rm ncmm playids --ids 123 # 只播放
+#    docker compose run --rm ncmm musician          # 音乐人任务
+#    docker compose run --rm ncmm fansgroup         # 乐迷团任务
+#    docker compose run --rm ncmm --help            # 查看帮助
+#
+# ============================================================
